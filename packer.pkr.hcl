@@ -1,0 +1,35 @@
+variable "aws_region" {
+  default = "us-east-1"
+}
+
+variable "ami_name" {
+  default = "rocky-custom-ami"
+}
+
+source "amazon-ebs" "rocky" {
+  region                  = var.aws_region
+  instance_type           = "t3.micro"
+  ssh_username            = "ec2-user"
+  ami_name                = "${var.ami_name}-${timestamp()}"
+  associate_public_ip_address = true
+
+  source_ami_filter {
+    filters = {
+      name                = "Rocky-9-*-x86_64-*"
+      virtualization-type = "hvm"
+      root-device-type    = "ebs"
+    }
+    owners      = ["792107900819"] # Rocky Linux official community
+    most_recent = true
+  }
+}
+
+build {
+  name    = "rocky-linux-ami"
+  sources = ["source.amazon-ebs.rocky"]
+
+  provisioner "ansible" {
+    playbook_file = "playbook.yml"
+    extra_arguments = ["--extra-vars", "ansible_user=ec2-user"]
+  }
+}
