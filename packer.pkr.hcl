@@ -28,7 +28,7 @@ source "amazon-ebs" "rocky" {
 
   source_ami_filter {
     filters = {
-      name                = "Rocky-9-*-x86_64"
+      name                = "Rocky-9-EC2-LVM-9.3-20231113.0.x86_64"
       virtualization-type = "hvm"
       root-device-type    = "ebs"
     }
