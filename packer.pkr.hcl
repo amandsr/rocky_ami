@@ -23,7 +23,7 @@ source "amazon-ebs" "rocky" {
   region                  = var.aws_region
   instance_type           = "t3.micro"
   ssh_username            = "ec2-user"
-  ami_name                = "${var.ami_name}-${timestamp()}"
+  ami_name                = "${var.ami_name}-${formatdate("20060102-150405", timestamp())}"
   associate_public_ip_address = true
 
   source_ami_filter {
