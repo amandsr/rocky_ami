@@ -1,3 +1,16 @@
+packer {
+  required_plugins {
+    amazon = {
+      version = ">= 1.0.0"
+      source  = "github.com/hashicorp/amazon"
+    }
+    ansible = {
+      version = ">= 1.0.0"
+      source  = "github.com/hashicorp/ansible"
+    }
+  }
+}
+
 variable "aws_region" {
   default = "us-east-1"
 }
@@ -19,7 +32,7 @@ source "amazon-ebs" "rocky" {
       virtualization-type = "hvm"
       root-device-type    = "ebs"
     }
-    owners      = ["792107900819"] # Rocky Linux official community
+    owners      = ["792107900819"]
     most_recent = true
   }
 }
