@@ -16,3 +16,5 @@
         name: firewalld
         state: stopped
         enabled: no
+      # This condition checks if the firewalld service is installed before running the task
+      when: ansible_facts.services['firewalld.service'] is defined
