@@ -6,8 +6,13 @@ on:
 jobs:
   build-ami:
     runs-on: ubuntu-latest
+    outputs:
+      ami_id: ${{ steps.packer_build.outputs.ami_id }}
+      ami_name_full: ${{ steps.set_ami_name.outputs.ami_name_full }}
     env:
-      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}     
 
     steps:
       - name: Checkout repository
@@ -28,12 +33,12 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/ubuntu.pem
           chmod 600 ~/.ssh/ubuntu.pem
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+      - name: Set full AMI name for tagging (due to timestamp in Packer)
+        id: set_ami_name
+        run: |
+          FULL_AMI_NAME="${{ env.AMI_NAME_PREFIX }}-$(date -u +'%Y-%m-%d')"
+          echo "ami_name_full=${FULL_AMI_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Generated AMI Name: $FULL_AMI_NAME"
 
       - name: Initialize Packer
         run: packer init .
@@ -42,4 +47,24 @@ jobs:
         run: packer validate .
 
       - name: Build AMI
-        run: packer build .
+        run: |
+          PACKER_OUTPUT=$(packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" .)
+          AMI_ID=$(echo "$PACKER_OUTPUT" | grep -oP 'ami-[0-9a-f]{17}' | tail -1)
+          if [ -z "$AMI_ID" ]; then
+            echo "Error: AMI ID not found in Packer output."
+            echo "$PACKER_OUTPUT" # Output full packer logs for debugging
+            exit 1
+          fi
+          echo "AMI_ID=$AMI_ID" >> "$GITHUB_OUTPUT"
+          echo "Built AMI ID: $AMI_ID"
+          echo "Packer build output: $PACKER_OUTPUT" # For full logging
+
+      - name: Tag the built AMI
+        run: |
+          aws ec2 create-tags \
+            --resources ${{ steps.packer_build.outputs.ami_id }} \
+            --tags \
+              Key=PipelineBuildDate,Value=$(date -u +'%Y-%m-%d') \
+              Key=Purpose,Value=GoldenAMI \
+              Key=Environment,Value=Test \
+              Key=BuiltBy,Value=GitHubActions
