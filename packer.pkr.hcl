@@ -45,6 +45,6 @@ build {
 
   provisioner "ansible" {
     playbook_file = "playbook.yml"
-    extra_arguments = ["--extra-vars", "ansible_user=rocky"]
+    #extra_arguments = ["--extra-vars", "ansible_user=rocky"]
   }
 }
