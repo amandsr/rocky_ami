@@ -25,7 +25,7 @@ source "amazon-ebs" "rocky" {
   ssh_username            = "rocky"
   #key_pair_name           = "ubuntu"
   #ssh_private_key_file    = "~/.ssh/ubuntu.pem"
-  ami_name                = "${var.ami_name}-${formatdate("20060102-150405", timestamp())}"
+  ami_name                = var.ami_name
   associate_public_ip_address = true
 
   source_ami_filter {
