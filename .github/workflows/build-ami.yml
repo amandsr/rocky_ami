@@ -48,6 +48,7 @@ jobs:
         run: packer validate .
 
       - name: Build AMI
+        id: packer_build
         run: |
           PACKER_OUTPUT=$(packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" .)
           AMI_ID=$(echo "$PACKER_OUTPUT" | grep -oP 'ami-[0-9a-f]{17}' | tail -1)
