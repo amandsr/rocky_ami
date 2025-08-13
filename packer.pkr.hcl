@@ -23,7 +23,7 @@ source "amazon-ebs" "rocky" {
   region                  = var.aws_region
   instance_type           = "t3.micro"
   ssh_username            = "rocky"
-  #key_pair_name           = "ubuntu"
+  key_pair_name           = "ubuntu"
   ssh_private_key_file    = "~/.ssh/ubuntu.pem"
   ami_name                = "${var.ami_name}-${formatdate("20060102-150405", timestamp())}"
   associate_public_ip_address = true
