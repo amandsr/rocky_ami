@@ -16,7 +16,7 @@ variable "aws_region" {
 }
 
 variable "ami_name" {
-  default = "rocky-custom-ami"
+  default = "rocky8-custom-ami"
 }
 
 source "amazon-ebs" "rocky" {
@@ -30,7 +30,7 @@ source "amazon-ebs" "rocky" {
 
   source_ami_filter {
     filters = {
-      name                = "Rocky-9-EC2-Base-9.5-20241118.0.x86_64"
+      name                = "Rocky-8-EC2-Base-8.10-20240528.0.x86_64"
       virtualization-type = "hvm"
       root-device-type    = "ebs"
     }
