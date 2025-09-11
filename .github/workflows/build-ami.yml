@@ -5,7 +5,8 @@ on:
 
 jobs:
   build-ami:
-    runs-on: ubuntu-latest
+    #runs-on: ubuntu-latest
+    runs-on: rocky9-local
     outputs:
       ami_id: ${{ steps.packer_build.outputs.ami_id }}
       ami_name_full: ${{ steps.set_ami_name.outputs.ami_name_full }}
