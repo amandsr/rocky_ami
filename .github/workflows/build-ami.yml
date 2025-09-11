@@ -27,7 +27,8 @@ jobs:
 
       - name: Set up Ansible
         run: |
-          sudo apt update && sudo apt install -y ansible
+          #sudo apt update && sudo apt install -y ansible
+          sudo yum install ansible* -y
       
       - name: Set up SSH private key
         run: |
