@@ -1,0 +1,47 @@
+name: Debug AWX Variables
+
+on:
+  workflow_dispatch: # Allows you to run this manually
+
+jobs:
+  test-variables-and-resolution:
+    runs-on: self-hosted # CRITICAL: Must run on your runner
+    
+    steps:
+      - name: Check Variables and DNS
+        # We pass the GitHub variables into the step's environment
+        env:
+          HOST_TO_TEST: ${{ vars.AWX_HOST }}
+          ID_TO_TEST: ${{ vars.AWX_JOB_TEMPLATE_ID }}
+        run: |
+          echo "--- DEBUGGING GITHUB ACTIONS VARIABLES ---"
+          echo "Value of 'vars.AWX_HOST': [$HOST_TO_TEST]"
+          echo "Value of 'vars.AWX_JOB_TEMPLATE_ID': [$ID_TO_TEST]"
+          echo "----------------------------------------------"
+          
+          if [ -z "$HOST_TO_TEST" ]; then
+            echo "Error: 'AWX_HOST' repository variable is EMPTY."
+            echo "Please go to Repository Settings > Secrets and variables > Actions > Variables and set 'AWX_HOST'."
+            exit 1
+          fi
+
+          if [ -z "$ID_TO_TEST" ]; then
+            echo "Error: 'AWX_JOB_TEMPLATE_ID' repository variable is EMPTY."
+            echo "Please go to Repository Settings > Secrets and variables > Actions > Variables and set 'AWX_JOB_TEMPLATE_ID'."
+            exit 1
+          fi
+          
+          echo ""
+          echo "Success: Variables are set."
+          echo "Attempting DNS lookup for host: $HOST_TO_TEST"
+          echo ""
+          
+          # Try to resolve the hostname
+          nslookup $HOST_TO_TEST
+          
+          if [ $? -eq 0 ]; then
+            echo "Success: Hostname resolved!"
+          else
+            echo "Error: Failed to resolve hostname. Check DNS on the runner."
+            exit 1
+          fi
