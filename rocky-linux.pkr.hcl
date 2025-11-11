@@ -43,7 +43,6 @@ variable "awx_job_template_id" {
   default = "0"
 }
 
-# ADDED: Variable for the AWX public key
 variable "awx_public_key" {
   type      = string
   sensitive = true
@@ -70,7 +69,7 @@ source "amazon-ebs" "rocky-linux" {
   # --- Instance & SSH ---
   instance_type = "t3.medium"
   ssh_username  = "rocky"
-  # REMOVED: ssh_private_key_file. Packer will generate its own.
+  # Packer will generate its own temporary key
   ssh_timeout = "10m"
 
   # --- AMI Naming ---
@@ -90,9 +89,7 @@ source "amazon-ebs" "rocky-linux" {
     "Name" = "packer-build-${var.ami_name}"
   }
   
-  # ADDED: User Data to inject AWX public key
-  # This tells cloud-init to add your AWX key to the 'rocky' user.
-  # This *appends* to the authorized_keys, so Packer's key still works.
+  # --- User Data to inject AWX public key ---
   user_data = <<-EOF
     #cloud-config
     users:
@@ -111,10 +108,10 @@ build {
     "source.amazon-ebs.rocky-linux"
   ]
 
-  # --- PROVISIONER 1: Call AWX Job Template ---
+  # --- PROVISIONER 1: Call AWX Job Template (FIXED AUTH) ---
   provisioner "shell-local" {
     environment_vars = [
-      "AWX_TOKEN=${var.awx_token}",
+      # REMOVED: "AWX_TOKEN=${var.awx_token}",
       "AWX_HOST=${var.awx_host}",
       "TEMPLATE_ID=${var.awx_job_template_id}",
       "AWS_REGION=${var.aws_region}",
@@ -123,7 +120,6 @@ build {
     inline = [
       # 1. GET INSTANCE ID
       "echo '==> Finding instance ID...'",
-      # We escape $AMI_NAME_VAR with $$ so Packer doesn't parse it as its own
       "INSTANCE_ID=$(aws ec2 describe-instances --region $AWS_REGION --filters \"Name=tag:Name,Values=packer-build-$${AMI_NAME_VAR}\" \"Name=instance-state-name,Values=pending,running\" --query \"Reservations[*].Instances[*].InstanceId\" --output text | tr -d '[:space:]')",
       "if [ -z \"$INSTANCE_ID\" ]; then echo '!!> Could not find running instance to tag!'; exit 1; fi",
       "echo \"==> Found instance: $INSTANCE_ID\"",
@@ -135,9 +131,6 @@ build {
       
       # 3. VERIFY SSH (Wait for cloud-init to finish)
       "echo '==> Waiting for SSH and cloud-init (key injection) to be ready...'",
-      # We must wait for the instance to be ready AND for our key to be injected.
-      # Packer's SSH wait is internal, so we add our own delay.
-      # 60 seconds should be safe for cloud-init to run.
       "sleep 60",
       "echo '==> Ready to call AWX.'",
 
@@ -147,7 +140,8 @@ build {
       "echo \"==> Target host for AWX: $TARGET_HOST\"",
 
       # 5. Launch the job (Using http:// as you confirmed)
-      "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" -H \"Content-Type: application/json\" -X POST -d \"{ \\\"limit\\\": \\\"$TARGET_HOST\\\" }\" http://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
+      # MODIFIED: Injected ${var.awx_token} directly
+      "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer ${var.awx_token}\" -H \"Content-Type: application/json\" -X POST -d \"{ \\\"limit\\\": \\\"$TARGET_HOST\\\" }\" http://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
 
       # 6. Get the Job ID and start polling
       "JOB_ID=$(echo $JOB_RESPONSE | jq -r .job)",
@@ -155,11 +149,13 @@ build {
       "echo \"==> AWX Job launched successfully. Job ID: $JOB_ID\"",
       "echo \"==> Waiting for job to complete...\"",
       "JOB_STATUS=\"running\"",
-      "while [ \"$JOB_STATUS\" == \"running\" ] || [ \"$JOB_STATUS\" == \"pending\" ] || [ \"$JOB_STATUS\" == \"waiting\" ]; do sleep 20; JOB_STATUS_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" http://$AWX_HOST/api/v2/jobs/$JOB_ID/); JOB_STATUS=$(echo $JOB_STATUS_RESPONSE | jq -r .status); echo \"... current job status: $JOB_STATUS\"; done",
+      # MODIFIED: Injected ${var.awx_token} directly
+      "while [ \"$JOB_STATUS\" == \"running\" ] || [ \"$JOB_STATUS\" == \"pending\" ] || [ \"$JOB_STATUS\" == \"waiting\" ]; do sleep 20; JOB_STATUS_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer ${var.awx_token}\" http://$AWX_HOST/api/v2/jobs/$JOB_ID/); JOB_STATUS=$(echo $JOB_STATUS_RESPONSE | jq -r .status); echo \"... current job status: $JOB_STATUS\"; done",
 
       # 7. Check for success or failure
       "echo \"==> AWX Job finished with status: $JOB_STATUS\"",
-      "if [ \"$JOB_STATUS\" != \"successful\" ]; then echo '!!> Ansible AWX job failed! Failing Packer build.'; echo '!!> AWX Job stdout:'; curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" http://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/; exit 1; else echo '==> AWX provisioning complete.'; fi"
+      # MODIFIED: Injected ${var.awx_token} directly
+      "if [ \"$JOB_STATUS\" != \"successful\" ]; then echo '!!> Ansible AWX job failed! Failing Packer build.'; echo '!!> AWX Job stdout:'; curl -ksSf -H \"Authorization: Bearer ${var.awx_token}\" http://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/; exit 1; else echo '==> AWX provisioning complete.'; fi"
     ]
   }
 
