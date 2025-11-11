@@ -15,6 +15,10 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }} # From GitHub Variables
       AMI_NAME_PREFIX: rocky-custom-ami
+      PKR_VAR_aws_region: ${{ vars.AWS_REGION }}
+      PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
+      PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
+      PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
 
     steps:
       - name: Checkout repository
@@ -58,12 +62,6 @@ jobs:
 
       - name: Build AMI
         id: packer_build
-        # This env block passes GitHub secrets/vars to Packer (PKR_VAR_...)
-        env:
-          PKR_VAR_aws_region: ${{ vars.AWS_REGION }}
-          PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
-          PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
-          PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
         run: |
           # MODIFIED: Target the specific file
           packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" rocky-linux.pkr.hcl
