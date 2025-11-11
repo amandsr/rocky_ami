@@ -27,15 +27,11 @@ jobs:
 
       - name: Install Runner Dependencies
         run: |
-          # MODIFIED: Added 'util-linux' (for uuidgen)
+          # Ensure curl, jq, awscli, and uuidgen are available
           echo "Installing curl, jq, awscli, and util-linux..."
           sudo yum install -y curl jq awscli util-linux
 
-      - name: Set up SSH private key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/ubuntu.pem
-          chmod 600 ~/.ssh/ubuntu.pem
+      # REMOVED: "Set up SSH private key" step is gone.
 
       - name: Set full AMI name
         id: set_ami_name
@@ -48,7 +44,6 @@ jobs:
         id: build_uuid
         run: |
           # Create a unique ID that we can pass to Packer
-          # This avoids the "build.uuid" runtime error
           UUID=$(uuidgen)
           echo "build_uuid=$UUID" >> "$GITHUB_OUTPUT"
           echo "Generated UUID: $UUID"
@@ -63,7 +58,6 @@ jobs:
           PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
           PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
           PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
-          # MODIFIED: Pass the new UUID as a Packer variable
           PKR_VAR_build_uuid: ${{ steps.build_uuid.outputs.build_uuid }}
         run: |
           packer validate rocky-linux.pkr.hcl
@@ -71,11 +65,10 @@ jobs:
       - name: Build AMI
         id: packer_build
         env:
-          PKR_VAR_aws_region: ${{ vars.AWS_REGION }}
+          PKR_VAR_aws_key: ${{ vars.AWS_REGION }}
           PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
           PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
           PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
-          # MODIFIED: Pass the new UUID as a Packer variable
           PKR_VAR_build_uuid: ${{ steps.build_uuid.outputs.build_uuid }}
         run: |
           packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" rocky-linux.pkr.hcl
