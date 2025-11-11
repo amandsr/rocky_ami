@@ -33,8 +33,7 @@ variable "awx_host" {
   default = "awx.example.com"
 }
 
-# MODIFIED: Removed sensitive = true
-# This is the fix for the 401 error
+# Removed sensitive = true to fix 401 bug
 variable "awx_token" {
   type = string
 }
@@ -44,8 +43,7 @@ variable "awx_job_template_id" {
   default = "0"
 }
 
-# MODIFIED: Removed sensitive = true
-# This is the fix for the 401 error
+# Removed sensitive = true to fix 401 bug
 variable "awx_public_key" {
   type = string
 }
@@ -91,13 +89,19 @@ source "amazon-ebs" "rocky-linux" {
     "Name" = "packer-build-${var.ami_name}"
   }
   
-  # --- User Data to inject AWX public key ---
+  # --- MODIFIED: Replaced 'users' with 'runcmd' for reliability ---
+  # This cloud-init script will now manually append the AWX public key
+  # to the rocky user's authorized_keys file.
   user_data = <<-EOF
     #cloud-config
-    users:
-      - name: rocky
-        ssh_authorized_keys:
-          - ${var.awx_public_key}
+    runcmd:
+      - echo "==> Injecting AWX Public Key for rocky user..."
+      - mkdir -p /home/rocky/.ssh
+      - echo "${var.awx_public_key}" >> /home/rocky/.ssh/authorized_keys
+      - chown -R rocky:rocky /home/rocky/.ssh
+      - chmod 700 /home/rocky/.ssh
+      - chmod 600 /home/rocky/.ssh/authorized_keys
+      - echo "==> Key injection complete."
   EOF
 }
 
@@ -121,7 +125,6 @@ build {
     inline = [
       # 1. GET INSTANCE ID
       "echo '==> Finding instance ID...'",
-      # We escape $AMI_NAME_VAR with $$ so Packer doesn't parse it as its own
       "INSTANCE_ID=$(aws ec2 describe-instances --region $AWS_REGION --filters \"Name=tag:Name,Values=packer-build-$${AMI_NAME_VAR}\" \"Name=instance-state-name,Values=pending,running\" --query \"Reservations[*].Instances[*].InstanceId\" --output text | tr -d '[:space:]')",
       "if [ -z \"$INSTANCE_ID\" ]; then echo '!!> Could not find running instance to tag!'; exit 1; fi",
       "echo \"==> Found instance: $INSTANCE_ID\"",
@@ -133,18 +136,16 @@ build {
       
       # 3. VERIFY SSH (Wait for cloud-init to finish)
       "echo '==> Waiting for SSH and cloud-init (key injection) to be ready...'",
-      "sleep 60",
+      "sleep 60", # This wait is critical for cloud-init to finish
       "echo '==> Ready to call AWX.'",
 
       # 4. PREPARE AWX CALL
       "echo '==> Launching Ansible AWX Job Template...'",
-      "TARGET_HOST=\"tag_packer_provision_packer_${var.build_uuid}\"",
-      "echo \"==> Target host for AWX: $TARGET_HOST\"",
+      "TARGET_GROUP=\"tag_packer_provision_packer_${var.build_uuid}\"", # We use the new group-based tag
+      "echo \"==> Target group for AWX: $TARGET_GROUP\"",
 
-      # 5. Launch the job (Using http:// as you confirmed)
-      #    We inject ${var.awx_token} directly, and it works
-      #    because we removed 'sensitive = true'
-      "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer ${var.awx_token}\" -H \"Content-Type: application/json\" -X POST -d \"{ \\\"limit\\\": \\\"$TARGET_HOST\\\" }\" http://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
+      # 5. Launch the job (Using http://)
+      "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer ${var.awx_token}\" -H \"Content-Type: application/json\" -X POST -d \"{ \\\"limit\\\": \\\"$TARGET_GROUP\\\" }\" http://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
 
       # 6. Get the Job ID and start polling
       "JOB_ID=$(echo $JOB_RESPONSE | jq -r .job)",
