@@ -71,7 +71,7 @@ source "amazon-ebs" "rocky-linux" {
   # --- AMI Naming ---
   ami_name = "${var.ami_name}-{{timestamp}}" # Uses GHA name + timestamp
 
-  # --- FINAL AMI TAGS (FIXED: 'ami_tags' changed to 'tags') ---
+  # --- FINAL AMI TAGS ---
   tags = {
     "Name"              = var.ami_name
     "PipelineBuildDate" = "{{isotime \"2006-01-02\"}}"
@@ -80,7 +80,7 @@ source "amazon-ebs" "rocky-linux" {
     "BuiltBy"           = "GitHubActions"
   }
 
-  # --- TEMPORARY INSTANCE TAGS (FIXED: Removed 'packer-provision') ---
+  # --- TEMPORARY INSTANCE TAGS ---
   run_tags = {
     # This tag is for the AWX Inventory filter
     "Name" = "packer-build-${var.ami_name}"
@@ -102,32 +102,31 @@ build {
       "AWX_TOKEN=${var.awx_token}",
       "AWX_HOST=${var.awx_host}",
       "TEMPLATE_ID=${var.awx_job_template_id}",
-      "BUILD_UUID=${build.uuid}", # This is valid here
+      # "BUILD_UUID=${build.uuid}", # <-- REMOVED: This was the error
       "AWS_REGION=${var.aws_region}",
       "AMI_NAME_VAR=${var.ami_name}" # Pass ami_name to find instance
     ]
     inline = [
       # 1. GET INSTANCE ID
-      #    We must find the instance ID ourselves using the run_tags
-      #    that Packer *just* applied.
       "echo '==> Finding instance ID...'",
+      # We escape $AMI_NAME_VAR with $$ so Packer doesn't parse it
       "INSTANCE_ID=$(aws ec2 describe-instances --region $AWS_REGION --filters \"Name=tag:Name,Values=packer-build-$${AMI_NAME_VAR}\" \"Name=instance-state-name,Values=pending,running\" --query \"Reservations[*].Instances[*].InstanceId\" --output text | tr -d '[:space:]')",
       "if [ -z \"$INSTANCE_ID\" ]; then echo '!!> Could not find running instance to tag!'; exit 1; fi",
       "echo \"==> Found instance: $INSTANCE_ID\"",
 
-      # 2. ADD UNIQUE TAG (NEW STEP)
-      #    This command uses aws-cli to tag the running instance
-      #    before AWX is called.
+      # 2. ADD UNIQUE TAG
       "echo '==> Applying unique tag to instance $INSTANCE_ID...'",
-      "aws ec2 create-tags --region $AWS_REGION --resources $INSTANCE_ID --tags Key=packer-provision,Value=packer-${BUILD_UUID}",
+      # FIXED: We use ${build.uuid} directly. Packer will interpolate this.
+      "aws ec2 create-tags --region $AWS_REGION --resources $INSTANCE_ID --tags Key=packer-provision,Value=packer-${build.uuid}",
       "echo '==> Tag applied.'",
 
       # 3. PREPARE AWX CALL
       "echo '==> Launching Ansible AWX Job Template...'",
-      "TARGET_HOST=\"tag_packer_provision_packer_${BUILD_UUID}\"",
+      # FIXED: We use ${build.uuid} directly here as well.
+      "TARGET_HOST=\"tag_packer_provision_packer_${build.uuid}\"",
       "echo \"==> Target host for AWX: $TARGET_HOST\"",
 
-      # 4. Launch the job AND pass the 'limit' variable
+      # 4. Launch the job
       "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" -H \"Content-Type: application/json\" -X POST -d \"{ \\\"limit\\\": \\\"$TARGET_HOST\\\" }\" https://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
 
       # 5. Get the Job ID and start polling
@@ -140,7 +139,7 @@ build {
 
       # 6. Check for success or failure
       "echo \"==> AWX Job finished with status: $JOB_STATUS\"",
-      "if [ \"$JOB_STATUS\" != \"successful\" ]; then echo '!!> Ansible AWX job failed! Failing Packer build.'; echo '!!> AWX Job stdout:'; curl -ksSf -H \"Authorization: BearGhaer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/; exit 1; else echo '==> AWX provisioning complete.'; fi"
+      "if [ \"$JOB_STATUS\" != \"successful\" ]; then echo '!!> Ansible AWX job failed! Failing Packer build.'; echo '!!> AWX Job stdout:'; curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/; exit 1; else echo '==> AWX provisioning complete.'; fi"
     ]
   }
 
