@@ -61,7 +61,7 @@ source "amazon-ebs" "rocky-linux" {
   # --- Base AMI Filter (Finds latest official Rocky 9) ---
   source_ami_filter {
     filters = {
-      "name"                = "Rocky-9-ec2-9.*"
+      "name"                = "Rocky-9-EC2-Base-9.6-20250531.0.*"
       "virtualization-type" = "hvm"
       "root-device-type"    = "ebs"
     }
