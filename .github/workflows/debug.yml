@@ -9,13 +9,14 @@ jobs:
     
     steps:
       - name: Test AWX Token
-        # We pass the GitHub variables/secrets into the step's environment
         env:
           HOST_TO_TEST: ${{ vars.AWX_HOST }}
           ID_TO_TEST: ${{ vars.AWX_JOB_TEMPLATE_ID }}
-          # This securely injects your secret into the step
           TEST_TOKEN: ${{ secrets.AWX_TOKEN }} 
         run: |
+          # Enable verbose command tracing
+          set -x
+          
           echo "--- DEBUGGING GITHUB ACTIONS VARIABLES ---"
           echo "Value of 'vars.AWX_HOST': [$HOST_TO_TEST]"
           echo "Value of 'vars.AWX_JOB_TEMPLATE_ID': [$ID_TO_TEST]"
@@ -23,22 +24,49 @@ jobs:
           
           if [ -z "$HOST_TO_TEST" ]; then
             echo "Error: 'AWX_HOST' repository variable is EMPTY."
-            echo "Please go to Repository Settings > Secrets and variables > Actions > Variables and set 'AWX_HOST'."
             exit 1
           fi
 
           if [ -z "$TEST_TOKEN" ]; then
             echo "Error: 'AWX_TOKEN' repository secret is EMPTY."
-            echo "Please go to Repository Settings > Secrets and variables > Actions > Secrets and set 'AWX_TOKEN'."
             exit 1
           fi
           
+          echo "--- CHECKING CURL INSTALLATION ---"
+          curl --version
+          echo "--------------------------------"
+
           echo ""
           echo "Success: Variables and Secret are loaded."
           echo "Attempting to authenticate to AWX at: http://$HOST_TO_TEST"
           echo ""
+
+          # --- NEW FIX: Unset proxy variables ---
+          # This is the most common cause of curl exit code 2 (CURLE_FAILED_INIT)
+          # when accessing internal IPs.
+          echo "Unsetting proxy environment variables..."
+          unset http_proxy
+          unset https_proxy
+          unset no_proxy
+          # --- END NEW FIX ---
           
           # This is the test. It uses the secret.
           # We use curl -i to show headers, and -sS to hide progress but show errors.
-          # This command attempts to list your job templates.
-          curl -i -sS -H "Authorization: Bearer $
+          curl -i -sS -H "Authorization: Bearer $TEST_TOKEN" "http://$HOST_TO_TEST/api/v2/job_templates/"
+          
+          # We'll check the exit code manually for debugging
+          CURL_EXIT_CODE=$?
+          echo ""
+          echo "curl command finished with exit code: $CURL_EXIT_CODE"
+          
+          if [ $CURL_EXIT_CODE -eq 0 ]; then
+            echo "Success: curl command ran (exit code 0). Check the HTTP status (200 or 401) above."
+          elif [ $CURL_EXIT_CODE -eq 2 ]; then
+            echo "Error: curl failed with exit code 2 (CURLE_FAILED_INIT)."
+            echo "This is a low-level curl initialization error."
+            echo "Even after unsetting proxies, this failed, suggesting a deeper runner environment problem."
+          else
+            echo "Error: curl failed with a non-zero exit code: $CURL_EXIT_CODE"
+          fi
+          
+          exit $CURL_EXIT_CODE
