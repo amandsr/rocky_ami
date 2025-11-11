@@ -65,7 +65,7 @@ source "amazon-ebs" "rocky-linux" {
   # --- Instance & SSH ---
   instance_type        = "t3.medium" # t2.micro can be too slow
   ssh_username         = "rocky"
-  ssh_private_key_file = "~/.ssh/ubuntu.pem" # Uses key from GHA step
+  #ssh_private_key_file = "~/.ssh/ubuntu.pem" # Uses key from GHA step
   ssh_timeout          = "10m"
 
   # --- AMI Naming ---
