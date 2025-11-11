@@ -1,4 +1,4 @@
-name: Build Rocky Linux AMI - AWX
+name: Build Rocky Linux AMI
 
 on:
   workflow_dispatch:
@@ -31,11 +31,12 @@ jobs:
 
       - name: Install Runner Dependencies
         run: |
-          # Ensure curl & jq are available for the shell-local provisioner
+          # MODIFIED: Added 'awscli'
+          # Ensure curl, jq, and awscli are available
           # This command is for RHEL/CentOS/Rocky/Fedora runners
-          # If using Ubuntu/Debian, use: sudo apt-get update && sudo apt-get install -y curl jq
-          echo "Installing curl and jq..."
-          sudo yum install -y curl jq
+          # If using Ubuntu/Debian, use: sudo apt-get update && sudo apt-get install -y curl jq awscli
+          echo "Installing curl, jq, and awscli..."
+          sudo yum install -y curl jq awscli
 
       - name: Set up SSH private key
         run: |
@@ -52,18 +53,18 @@ jobs:
 
       - name: Initialize Packer
         run: |
-          # MODIFIED: Target the specific file to avoid duplicate variable errors
+          # Point to the specific file to avoid duplicate variable errors
           packer init rocky-linux.pkr.hcl
 
       - name: Validate template
         run: |
-          # MODIFIED: Target the specific file
+          # Point to the specific file
           packer validate rocky-linux.pkr.hcl
 
       - name: Build AMI
         id: packer_build
         run: |
-          # MODIFIED: Target the specific file
+          # Point to the specific file
           packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" rocky-linux.pkr.hcl
 
       - name: Extract AMI ID from Manifest
