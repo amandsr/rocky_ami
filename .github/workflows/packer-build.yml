@@ -19,7 +19,6 @@ jobs:
       PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
       PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
       PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
-      # MODIFIED: Pass the new UUID as a Packer variable
       PKR_VAR_build_uuid: ${{ steps.build_uuid.outputs.build_uuid }}
 
     steps:
