@@ -19,6 +19,8 @@ jobs:
       PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
       PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
       PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
+      # MODIFIED: Pass the new UUID as a Packer variable
+      PKR_VAR_build_uuid: ${{ steps.build_uuid.outputs.build_uuid }}
 
     steps:
       - name: Checkout repository
@@ -31,12 +33,9 @@ jobs:
 
       - name: Install Runner Dependencies
         run: |
-          # MODIFIED: Added 'awscli'
-          # Ensure curl, jq, and awscli are available
-          # This command is for RHEL/CentOS/Rocky/Fedora runners
-          # If using Ubuntu/Debian, use: sudo apt-get update && sudo apt-get install -y curl jq awscli
-          echo "Installing curl, jq, and awscli..."
-          sudo yum install -y curl jq awscli
+          # MODIFIED: Added 'util-linux' (for uuidgen)
+          echo "Installing curl, jq, awscli, and util-linux..."
+          sudo yum install -y curl jq awscli util-linux
 
       - name: Set up SSH private key
         run: |
@@ -51,27 +50,31 @@ jobs:
           echo "ami_name_full=${FULL_AMI_NAME}" >> "$GITHUB_OUTPUT"
           echo "Generated AMI Name: $FULL_AMI_NAME"
 
+      - name: Generate Build UUID
+        id: build_uuid
+        run: |
+          # Create a unique ID that we can pass to Packer
+          # This avoids the "build.uuid" runtime error
+          UUID=$(uuidgen)
+          echo "build_uuid=$UUID" >> "$GITHUB_OUTPUT"
+          echo "Generated UUID: $UUID"
+
       - name: Initialize Packer
         run: |
-          # Point to the specific file to avoid duplicate variable errors
           packer init rocky-linux.pkr.hcl
 
       - name: Validate template
         run: |
-          # Point to the specific file
           packer validate rocky-linux.pkr.hcl
 
       - name: Build AMI
         id: packer_build
         run: |
-          # Point to the specific file
           packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" rocky-linux.pkr.hcl
 
       - name: Extract AMI ID from Manifest
         id: extract_ami_id
         run: |
-          # This is the new, reliable way to get the AMI ID
-          # It reads the JSON file created by the 'manifest' post-processor
           if [ ! -f rocky-manifest.json ]; then
             echo "Error: manifest file not found!"
             exit 1
