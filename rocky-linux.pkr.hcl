@@ -26,11 +26,9 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
-# MODIFIED: Added this new variable
 # Injected by GHA: env PKR_VAR_build_uuid
 variable "build_uuid" {
   type = string
-  # No default, must be provided by the workflow
 }
 
 # Injected by GHA: env PKR_VAR_awx_host
@@ -61,7 +59,7 @@ source "amazon-ebs" "rocky-linux" {
   # --- Base AMI Filter (Finds latest official Rocky 9) ---
   source_ami_filter {
     filters = {
-      "name"                = "Rocky-9-EC2-Base-9.6-20250531.0.x86_64-*"
+      "name"                = "Rocky-9-ec2-9.*"
       "virtualization-type" = "hvm"
       "root-device-type"    = "ebs"
     }
@@ -70,10 +68,11 @@ source "amazon-ebs" "rocky-linux" {
   }
 
   # --- Instance & SSH ---
-  instance_type        = "t3.medium"
-  ssh_username         = "rocky"
-  ssh_private_key_file = "~/.ssh/ubuntu.pem"
-  ssh_timeout          = "10m"
+  instance_type = "t3.medium"
+  ssh_username  = "rocky"
+  # REMOVED: ssh_private_key_file = "~/.ssh/ubuntu.pem"
+  # Packer will now generate a temporary key.
+  ssh_timeout = "10m"
 
   # --- AMI Naming ---
   ami_name = "${var.ami_name}-{{timestamp}}"
@@ -121,13 +120,13 @@ build {
 
       # 2. ADD UNIQUE TAG
       "echo '==> Applying unique tag to instance $INSTANCE_ID...'",
-      # MODIFIED: Use the variable ${var.build_uuid} passed from GHA
+      # Use the variable ${var.build_uuid} passed from GHA
       "aws ec2 create-tags --region $AWS_REGION --resources $INSTANCE_ID --tags Key=packer-provision,Value=packer-${var.build_uuid}",
       "echo '==> Tag applied.'",
 
       # 3. PREPARE AWX CALL
       "echo '==> Launching Ansible AWX Job Template...'",
-      # MODIFIED: Use the variable ${var.build_uuid} passed from GHA
+      # Use the variable ${var.build_uuid} passed from GHA
       "TARGET_HOST=\"tag_packer_provision_packer_${var.build_uuid}\"",
       "echo \"==> Target host for AWX: $TARGET_HOST\"",
 
