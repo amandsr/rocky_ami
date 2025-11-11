@@ -40,15 +40,6 @@ jobs:
           echo "Success: Variables and Secret are loaded."
           echo "Attempting to authenticate to AWX at: http://$HOST_TO_TEST"
           echo ""
-
-          # --- NEW FIX: Unset proxy variables ---
-          # This is the most common cause of curl exit code 2 (CURLE_FAILED_INIT)
-          # when accessing internal IPs.
-          echo "Unsetting proxy environment variables..."
-          unset http_proxy
-          unset https_proxy
-          unset no_proxy
-          # --- END NEW FIX ---
           
           # This is the test. It uses the secret.
           # We use curl -i to show headers, and -sS to hide progress but show errors.
