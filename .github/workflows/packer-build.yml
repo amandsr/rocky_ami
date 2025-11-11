@@ -15,11 +15,6 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }} # From GitHub Variables
       AMI_NAME_PREFIX: rocky-custom-ami
-      PKR_VAR_aws_region: ${{ vars.AWS_REGION }}
-      PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
-      PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
-      PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
-      PKR_VAR_build_uuid: ${{ steps.build_uuid.outputs.build_uuid }}
 
     steps:
       - name: Checkout repository
@@ -63,11 +58,25 @@ jobs:
           packer init rocky-linux.pkr.hcl
 
       - name: Validate template
+        env:
+          PKR_VAR_aws_region: ${{ vars.AWS_REGION }}
+          PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
+          PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
+          PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
+          # MODIFIED: Pass the new UUID as a Packer variable
+          PKR_VAR_build_uuid: ${{ steps.build_uuid.outputs.build_uuid }}
         run: |
           packer validate rocky-linux.pkr.hcl
 
       - name: Build AMI
         id: packer_build
+        env:
+          PKR_VAR_aws_region: ${{ vars.AWS_REGION }}
+          PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
+          PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
+          PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
+          # MODIFIED: Pass the new UUID as a Packer variable
+          PKR_VAR_build_uuid: ${{ steps.build_uuid.outputs.build_uuid }}
         run: |
           packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" rocky-linux.pkr.hcl
 
