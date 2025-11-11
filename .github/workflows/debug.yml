@@ -1,18 +1,20 @@
-name: Debug AWX Variables
+name: Debug AWX Token
 
 on:
   workflow_dispatch: # Allows you to run this manually
 
 jobs:
-  test-variables-and-resolution:
+  test-token-and-resolution:
     runs-on: self-hosted # CRITICAL: Must run on your runner
     
     steps:
-      - name: Check Variables and DNS
-        # We pass the GitHub variables into the step's environment
+      - name: Test AWX Token
+        # We pass the GitHub variables/secrets into the step's environment
         env:
           HOST_TO_TEST: ${{ vars.AWX_HOST }}
           ID_TO_TEST: ${{ vars.AWX_JOB_TEMPLATE_ID }}
+          # This securely injects your secret into the step
+          TEST_TOKEN: ${{ secrets.AWX_TOKEN }} 
         run: |
           echo "--- DEBUGGING GITHUB ACTIONS VARIABLES ---"
           echo "Value of 'vars.AWX_HOST': [$HOST_TO_TEST]"
@@ -25,23 +27,18 @@ jobs:
             exit 1
           fi
 
-          if [ -z "$ID_TO_TEST" ]; then
-            echo "Error: 'AWX_JOB_TEMPLATE_ID' repository variable is EMPTY."
-            echo "Please go to Repository Settings > Secrets and variables > Actions > Variables and set 'AWX_JOB_TEMPLATE_ID'."
+          if [ -z "$TEST_TOKEN" ]; then
+            echo "Error: 'AWX_TOKEN' repository secret is EMPTY."
+            echo "Please go to Repository Settings > Secrets and variables > Actions > Secrets and set 'AWX_TOKEN'."
             exit 1
           fi
           
           echo ""
-          echo "Success: Variables are set."
-          echo "Attempting DNS lookup for host: $HOST_TO_TEST"
+          echo "Success: Variables and Secret are loaded."
+          echo "Attempting to authenticate to AWX at: http://$HOST_TO_TEST"
           echo ""
           
-          # Try to resolve the hostname
-          nslookup $HOST_TO_TEST
-          
-          if [ $? -eq 0 ]; then
-            echo "Success: Hostname resolved!"
-          else
-            echo "Error: Failed to resolve hostname. Check DNS on the runner."
-            exit 1
-          fi
+          # This is the test. It uses the secret.
+          # We use curl -i to show headers, and -sS to hide progress but show errors.
+          # This command attempts to list your job templates.
+          curl -i -sS -H "Authorization: Bearer $
