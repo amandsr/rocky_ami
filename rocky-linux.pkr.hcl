@@ -140,6 +140,7 @@ build {
       "echo '==> Ready to call AWX.'",
 
       # 4. PREPARE AWX CALL
+      sleep 600
       "echo '==> Launching Ansible AWX Job Template...'",
       "TARGET_GROUP=\"tag_packer_provision_packer_${var.build_uuid}\"", # We use the new group-based tag
       "echo \"==> Target group for AWX: $TARGET_GROUP\"",
