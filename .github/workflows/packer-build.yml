@@ -1,0 +1,84 @@
+name: Build Rocky Linux AMI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ami:
+    runs-on: self-hosted
+    outputs:
+      ami_id: ${{ steps.extract_ami_id.outputs.AMI_ID }}
+      ami_name_full: ${{ steps.set_ami_name.outputs.ami_name_full }}
+    env:
+      # AWS credentials for the runner's environment
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }} # From GitHub Variables
+      AMI_NAME_PREFIX: rocky-custom-ami
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Packer
+        uses: hashicorp/setup-packer@v3
+        with:
+          version: latest
+
+      - name: Install Runner Dependencies
+        run: |
+          # Ensure curl & jq are available for the shell-local provisioner
+          # This command is for RHEL/CentOS/Rocky/Fedora runners
+          # If using Ubuntu/Debian, use: sudo apt-get update && sudo apt-get install -y curl jq
+          echo "Installing curl and jq..."
+          sudo yum install -y curl jq
+
+      - name: Set up SSH private key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/ubuntu.pem
+          chmod 600 ~/.ssh/ubuntu.pem
+
+      - name: Set full AMI name
+        id: set_ami_name
+        run: |
+          FULL_AMI_NAME="${{ env.AMI_NAME_PREFIX }}-$(date -u +'%Y-%m-%d')"
+          echo "ami_name_full=${FULL_AMI_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Generated AMI Name: $FULL_AMI_NAME"
+
+      - name: Initialize Packer
+        run: packer init .
+
+      - name: Validate template
+        run: packer validate .
+
+      - name: Build AMI
+        id: packer_build
+        # This env block passes GitHub secrets/vars to Packer (PKR_VAR_...)
+        env:
+          PKR_VAR_aws_region: ${{ vars.AWS_REGION }}
+          PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
+          PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
+          PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
+        run: |
+          # We pass the ami_name as a -var and the AWX vars via env
+          # Packer will run and create 'rocky-manifest.json' on success
+          packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" .
+
+      - name: Extract AMI ID from Manifest
+        id: extract_ami_id
+        run: |
+          # This is the new, reliable way to get the AMI ID
+          # It reads the JSON file created by the 'manifest' post-processor
+          if [ ! -f rocky-manifest.json ]; then
+            echo "Error: manifest file not found!"
+            exit 1
+          fi
+          AMI_ID=$(jq -r '.builds[-1].artifact_id | split(":")[-1]' rocky-manifest.json)
+          if [ -z "$AMI_ID" ]; then
+            echo "Error: AMI ID not found in manifest file."
+            cat rocky-manifest.json
+            exit 1
+          fi
+          echo "AMI_ID=$AMI_ID" >> "$GITHUB_OUTPUT"
+          echo "Built AMI ID: $AMI_ID"
