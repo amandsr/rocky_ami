@@ -65,7 +65,7 @@ source "amazon-ebs" "rocky-linux" {
   # --- Instance & SSH ---
   instance_type        = "t3.medium" # t2.micro can be too slow
   ssh_username         = "rocky"
-  #ssh_private_key_file = "~/.ssh/ubuntu.pem" # Uses key from GHA step
+  ssh_private_key_file = "~/.ssh/ubuntu.pem" # Uses key from GHA step
   ssh_timeout          = "10m"
 
   # --- AMI Naming ---
@@ -98,7 +98,7 @@ build {
     "source.amazon-ebs.rocky-linux"
   ]
 
-  # --- PROVISIONER 1: Call AWX Job Template ---
+  # --- PROVISIONER 1: Call AWX Job Template (FIXED SYNTAX) ---
   provisioner "shell-local" {
     environment_vars = [
       "AWX_TOKEN=${var.awx_token}",
@@ -108,42 +108,23 @@ build {
     ]
     inline = [
       "echo '==> Launching Ansible AWX Job Template...'",
-
-      # Define the host name AWX will find in its dynamic inventory
-      # Based on the 'packer-provision' tag
       "TARGET_HOST=\"tag_packer_provision_packer_${BUILD_UUID}\"",
       "echo \"==> Target host for AWX: $TARGET_HOST\"",
 
       # 1. Launch the job AND pass the 'limit' variable
-      #    We use '-k' to ignore self-signed certs on local AWX
-      "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" -H \"Content-Type: application/json\" -X POST \\",
-      "  -d \"{ \\\"limit\\\": \\\"$TARGET_HOST\\\" }\" \\",
-      "  https://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
+      "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" -H \"Content-Type: application/json\" -X POST -d \"{ \\\"limit\\\": \\\"$TARGET_HOST\\\" }\" https://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
 
       # 2. Get the Job ID and start polling
       "JOB_ID=$(echo $JOB_RESPONSE | jq -r .job)",
       "if [ \"$JOB_ID\" == \"null\" ] || [ -z \"$JOB_ID\" ]; then echo 'Failed to launch AWX job! Check config/credentials.'; echo \"AWX Response: $JOB_RESPONSE\"; exit 1; fi",
       "echo \"==> AWX Job launched successfully. Job ID: $JOB_ID\"",
       "echo \"==> Waiting for job to complete...\"",
-
       "JOB_STATUS=\"running\"",
-      "while [ \"$JOB_STATUS\" == \"running\" ] || [ \"$JOB_STATUS\" == \"pending\" ] || [ \"$JOB_STATUS\" == \"waiting\" ]; do",
-      "  sleep 20", # Poll every 20 seconds
-      "  JOB_STATUS_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/)",
-      "  JOB_STATUS=$(echo $JOB_STATUS_RESPONSE | jq -r .status)",
-      "  echo \"... current job status: $JOB_STATUS\"",
-      "done",
+      "while [ \"$JOB_STATUS\" == \"running\" ] || [ \"$JOB_STATUS\" == \"pending\" ] || [ \"$JOB_STATUS\" == \"waiting\" ]; do sleep 20; JOB_STATUS_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/); JOB_STATUS=$(echo $JOB_STATUS_RESPONSE | jq -r .status); echo \"... current job status: $JOB_STATUS\"; done",
 
-      # 3. Check for success or failure
+      # 3. Check for success or failure (all on one line for safety)
       "echo \"==> AWX Job finished with status: $JOB_STATUS\"",
-      "if [ \"$JOB_STATUS\" != \"successful\" ]; then",
-      "  echo '!!> Ansible AWX job failed! Failing Packer build.'",
-      "  # Get job output from AWX for debugging
-      "  echo '!!> AWX Job stdout:'",
-      "  curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/",
-      "  exit 1",
-      "fi",
-      "echo '==> AWX provisioning complete.'"
+      "if [ \"$JOB_STATUS\" != \"successful\" ]; then echo '!!> Ansible AWX job failed! Failing Packer build.'; echo '!!> AWX Job stdout:'; curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/; exit 1; else echo '==> AWX provisioning complete.'; fi"
     ]
   }
 
