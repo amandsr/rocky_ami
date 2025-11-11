@@ -1,4 +1,4 @@
-name: Build Rocky Linux AMI - with AWX
+name: Build Rocky Linux AMI - AWX
 
 on:
   workflow_dispatch:
