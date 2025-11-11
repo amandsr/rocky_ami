@@ -71,8 +71,8 @@ source "amazon-ebs" "rocky-linux" {
   # --- AMI Naming ---
   ami_name = "${var.ami_name}-{{timestamp}}" # Uses GHA name + timestamp
 
-  # --- FINAL AMI TAGS (Replaces your 'aws ec2 create-tags' step) ---
-  ami_tags = {
+  # --- FINAL AMI TAGS (FIXED: 'ami_tags' changed to 'tags') ---
+  tags = {
     "Name"              = var.ami_name
     "PipelineBuildDate" = "{{isotime \"2006-01-02\"}}"
     "Purpose"           = "GoldenAMI"
@@ -80,12 +80,10 @@ source "amazon-ebs" "rocky-linux" {
     "BuiltBy"           = "GitHubActions"
   }
 
-  # --- TEMPORARY INSTANCE TAGS (This is how AWX finds it) ---
+  # --- TEMPORARY INSTANCE TAGS (FIXED: Removed 'packer-provision') ---
   run_tags = {
     # This tag is for the AWX Inventory filter
     "Name" = "packer-build-${var.ami_name}"
-    # This tag is for the AWX Job 'limit'
-    "packer-provision" = "packer-${build.uuid}"
   }
 }
 
@@ -98,23 +96,41 @@ build {
     "source.amazon-ebs.rocky-linux"
   ]
 
-  # --- PROVISIONER 1: Call AWX Job Template (FIXED SYNTAX) ---
+  # --- PROVISIONER 1: Call AWX Job Template (FIXED LOGIC) ---
   provisioner "shell-local" {
     environment_vars = [
       "AWX_TOKEN=${var.awx_token}",
       "AWX_HOST=${var.awx_host}",
       "TEMPLATE_ID=${var.awx_job_template_id}",
-      "BUILD_UUID=${build.uuid}" # Pass Packer's unique ID
+      "BUILD_UUID=${build.uuid}", # This is valid here
+      "AWS_REGION=${var.aws_region}",
+      "AMI_NAME_VAR=${var.ami_name}" # Pass ami_name to find instance
     ]
     inline = [
+      # 1. GET INSTANCE ID
+      #    We must find the instance ID ourselves using the run_tags
+      #    that Packer *just* applied.
+      "echo '==> Finding instance ID...'",
+      "INSTANCE_ID=$(aws ec2 describe-instances --region $AWS_REGION --filters \"Name=tag:Name,Values=packer-build-${AMI_NAME_VAR}\" \"Name=instance-state-name,Values=pending,running\" --query \"Reservations[*].Instances[*].InstanceId\" --output text | tr -d '[:space:]')",
+      "if [ -z \"$INSTANCE_ID\" ]; then echo '!!> Could not find running instance to tag!'; exit 1; fi",
+      "echo \"==> Found instance: $INSTANCE_ID\"",
+
+      # 2. ADD UNIQUE TAG (NEW STEP)
+      #    This command uses aws-cli to tag the running instance
+      #    before AWX is called.
+      "echo '==> Applying unique tag to instance $INSTANCE_ID...'",
+      "aws ec2 create-tags --region $AWS_REGION --resources $INSTANCE_ID --tags Key=packer-provision,Value=packer-${BUILD_UUID}",
+      "echo '==> Tag applied.'",
+
+      # 3. PREPARE AWX CALL
       "echo '==> Launching Ansible AWX Job Template...'",
       "TARGET_HOST=\"tag_packer_provision_packer_${BUILD_UUID}\"",
       "echo \"==> Target host for AWX: $TARGET_HOST\"",
 
-      # 1. Launch the job AND pass the 'limit' variable
+      # 4. Launch the job AND pass the 'limit' variable
       "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" -H \"Content-Type: application/json\" -X POST -d \"{ \\\"limit\\\": \\\"$TARGET_HOST\\\" }\" https://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
 
-      # 2. Get the Job ID and start polling
+      # 5. Get the Job ID and start polling
       "JOB_ID=$(echo $JOB_RESPONSE | jq -r .job)",
       "if [ \"$JOB_ID\" == \"null\" ] || [ -z \"$JOB_ID\" ]; then echo 'Failed to launch AWX job! Check config/credentials.'; echo \"AWX Response: $JOB_RESPONSE\"; exit 1; fi",
       "echo \"==> AWX Job launched successfully. Job ID: $JOB_ID\"",
@@ -122,15 +138,13 @@ build {
       "JOB_STATUS=\"running\"",
       "while [ \"$JOB_STATUS\" == \"running\" ] || [ \"$JOB_STATUS\" == \"pending\" ] || [ \"$JOB_STATUS\" == \"waiting\" ]; do sleep 20; JOB_STATUS_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/); JOB_STATUS=$(echo $JOB_STATUS_RESPONSE | jq -r .status); echo \"... current job status: $JOB_STATUS\"; done",
 
-      # 3. Check for success or failure (all on one line for safety)
+      # 6. Check for success or failure
       "echo \"==> AWX Job finished with status: $JOB_STATUS\"",
-      "if [ \"$JOB_STATUS\" != \"successful\" ]; then echo '!!> Ansible AWX job failed! Failing Packer build.'; echo '!!> AWX Job stdout:'; curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/; exit 1; else echo '==> AWX provisioning complete.'; fi"
+      "if [ \"$JOB_STATUS\" != \"successful\" ]; then echo '!!> Ansible AWX job failed! Failing Packer build.'; echo '!!> AWX Job stdout:'; curl -ksSf -H \"Authorization: BearGhaer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/; exit 1; else echo '==> AWX provisioning complete.'; fi"
     ]
   }
 
   # --- POST-PROCESSOR: Create manifest file ---
-  # This creates a JSON file with the AMI ID, which is
-  # much safer than trying to 'grep' the build log.
   post-processor "manifest" {
     output     = "rocky-manifest.json"
     strip_path = true
