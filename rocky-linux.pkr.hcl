@@ -33,9 +33,10 @@ variable "awx_host" {
   default = "awx.example.com"
 }
 
+# MODIFIED: Removed sensitive = true
+# This is the fix for the 401 error
 variable "awx_token" {
-  type      = string
-  sensitive = true
+  type = string
 }
 
 variable "awx_job_template_id" {
@@ -43,9 +44,10 @@ variable "awx_job_template_id" {
   default = "0"
 }
 
+# MODIFIED: Removed sensitive = true
+# This is the fix for the 401 error
 variable "awx_public_key" {
-  type      = string
-  sensitive = true
+  type = string
 }
 
 # ================================================================
@@ -108,10 +110,9 @@ build {
     "source.amazon-ebs.rocky-linux"
   ]
 
-  # --- PROVISIONER 1: Call AWX Job Template (FIXED AUTH) ---
+  # --- PROVISIONER 1: Call AWX Job Template ---
   provisioner "shell-local" {
     environment_vars = [
-      # REMOVED: "AWX_TOKEN=${var.awx_token}",
       "AWX_HOST=${var.awx_host}",
       "TEMPLATE_ID=${var.awx_job_template_id}",
       "AWS_REGION=${var.aws_region}",
@@ -120,6 +121,7 @@ build {
     inline = [
       # 1. GET INSTANCE ID
       "echo '==> Finding instance ID...'",
+      # We escape $AMI_NAME_VAR with $$ so Packer doesn't parse it as its own
       "INSTANCE_ID=$(aws ec2 describe-instances --region $AWS_REGION --filters \"Name=tag:Name,Values=packer-build-$${AMI_NAME_VAR}\" \"Name=instance-state-name,Values=pending,running\" --query \"Reservations[*].Instances[*].InstanceId\" --output text | tr -d '[:space:]')",
       "if [ -z \"$INSTANCE_ID\" ]; then echo '!!> Could not find running instance to tag!'; exit 1; fi",
       "echo \"==> Found instance: $INSTANCE_ID\"",
@@ -140,7 +142,8 @@ build {
       "echo \"==> Target host for AWX: $TARGET_HOST\"",
 
       # 5. Launch the job (Using http:// as you confirmed)
-      # MODIFIED: Injected ${var.awx_token} directly
+      #    We inject ${var.awx_token} directly, and it works
+      #    because we removed 'sensitive = true'
       "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer ${var.awx_token}\" -H \"Content-Type: application/json\" -X POST -d \"{ \\\"limit\\\": \\\"$TARGET_HOST\\\" }\" http://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
 
       # 6. Get the Job ID and start polling
@@ -149,12 +152,10 @@ build {
       "echo \"==> AWX Job launched successfully. Job ID: $JOB_ID\"",
       "echo \"==> Waiting for job to complete...\"",
       "JOB_STATUS=\"running\"",
-      # MODIFIED: Injected ${var.awx_token} directly
       "while [ \"$JOB_STATUS\" == \"running\" ] || [ \"$JOB_STATUS\" == \"pending\" ] || [ \"$JOB_STATUS\" == \"waiting\" ]; do sleep 20; JOB_STATUS_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer ${var.awx_token}\" http://$AWX_HOST/api/v2/jobs/$JOB_ID/); JOB_STATUS=$(echo $JOB_STATUS_RESPONSE | jq -r .status); echo \"... current job status: $JOB_STATUS\"; done",
 
       # 7. Check for success or failure
       "echo \"==> AWX Job finished with status: $JOB_STATUS\"",
-      # MODIFIED: Injected ${var.awx_token} directly
       "if [ \"$JOB_STATUS\" != \"successful\" ]; then echo '!!> Ansible AWX job failed! Failing Packer build.'; echo '!!> AWX Job stdout:'; curl -ksSf -H \"Authorization: Bearer ${var.awx_token}\" http://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/; exit 1; else echo '==> AWX provisioning complete.'; fi"
     ]
   }
