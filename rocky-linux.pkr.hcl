@@ -131,7 +131,7 @@ build {
       "echo \"==> Target host for AWX: $TARGET_HOST\"",
 
       # 4. Launch the job
-      "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" -H \"Content-Type: application/json\" -X POST -d \"{ \\\"limit\\\": \\\"$TARGET_HOST\\\" }\" https://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
+      "JOB_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" -H \"Content-Type: application/json\" -X POST -d \"{ \\\"limit\\\": \\\"$TARGET_HOST\\\" }\" http://$AWX_HOST/api/v2/job_templates/$TEMPLATE_ID/launch/)",
 
       # 5. Get the Job ID and start polling
       "JOB_ID=$(echo $JOB_RESPONSE | jq -r .job)",
@@ -139,11 +139,11 @@ build {
       "echo \"==> AWX Job launched successfully. Job ID: $JOB_ID\"",
       "echo \"==> Waiting for job to complete...\"",
       "JOB_STATUS=\"running\"",
-      "while [ \"$JOB_STATUS\" == \"running\" ] || [ \"$JOB_STATUS\" == \"pending\" ] || [ \"$JOB_STATUS\" == \"waiting\" ]; do sleep 20; JOB_STATUS_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/); JOB_STATUS=$(echo $JOB_STATUS_RESPONSE | jq -r .status); echo \"... current job status: $JOB_STATUS\"; done",
+      "while [ \"$JOB_STATUS\" == \"running\" ] || [ \"$JOB_STATUS\" == \"pending\" ] || [ \"$JOB_STATUS\" == \"waiting\" ]; do sleep 20; JOB_STATUS_RESPONSE=$(curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" http://$AWX_HOST/api/v2/jobs/$JOB_ID/); JOB_STATUS=$(echo $JOB_STATUS_RESPONSE | jq -r .status); echo \"... current job status: $JOB_STATUS\"; done",
 
       # 6. Check for success or failure
       "echo \"==> AWX Job finished with status: $JOB_STATUS\"",
-      "if [ \"$JOB_STATUS\" != \"successful\" ]; then echo '!!> Ansible AWX job failed! Failing Packer build.'; echo '!!> AWX Job stdout:'; curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" https://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/; exit 1; else echo '==> AWX provisioning complete.'; fi"
+      "if [ \"$JOB_STATUS\" != \"successful\" ]; then echo '!!> Ansible AWX job failed! Failing Packer build.'; echo '!!> AWX Job stdout:'; curl -ksSf -H \"Authorization: Bearer $AWX_TOKEN\" http://$AWX_HOST/api/v2/jobs/$JOB_ID/stdout/; exit 1; else echo '==> AWX provisioning complete.'; fi"
     ]
   }
 
