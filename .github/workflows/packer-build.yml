@@ -10,10 +10,9 @@ jobs:
       ami_id: ${{ steps.extract_ami_id.outputs.AMI_ID }}
       ami_name_full: ${{ steps.set_ami_name.outputs.ami_name_full }}
     env:
-      # AWS credentials for the runner's environment
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }} # From GitHub Variables
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
       AMI_NAME_PREFIX: rocky-custom-ami
 
     steps:
@@ -27,11 +26,11 @@ jobs:
 
       - name: Install Runner Dependencies
         run: |
-          # Ensure curl, jq, awscli, and uuidgen are available
           echo "Installing curl, jq, awscli, and util-linux..."
           sudo yum install -y curl jq awscli util-linux
 
-      # REMOVED: "Set up SSH private key" step is gone.
+      # This step is GONE. We no longer use a custom key for Packer.
+      # - name: Set up SSH private key
 
       - name: Set full AMI name
         id: set_ami_name
@@ -43,7 +42,6 @@ jobs:
       - name: Generate Build UUID
         id: build_uuid
         run: |
-          # Create a unique ID that we can pass to Packer
           UUID=$(uuidgen)
           echo "build_uuid=$UUID" >> "$GITHUB_OUTPUT"
           echo "Generated UUID: $UUID"
@@ -59,17 +57,21 @@ jobs:
           PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
           PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
           PKR_VAR_build_uuid: ${{ steps.build_uuid.outputs.build_uuid }}
+          # Pass the new AWX public key
+          PKR_VAR_awx_public_key: ${{ secrets.AWX_PUBLIC_KEY }}
         run: |
           packer validate rocky-linux.pkr.hcl
 
       - name: Build AMI
         id: packer_build
         env:
-          PKR_VAR_aws_key: ${{ vars.AWS_REGION }}
+          PKR_VAR_aws_region: ${{ vars.AWS_REGION }}
           PKR_VAR_awx_token: ${{ secrets.AWX_TOKEN }}
           PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
           PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
           PKR_VAR_build_uuid: ${{ steps.build_uuid.outputs.build_uuid }}
+          # Pass the new AWX public key
+          PKR_VAR_awx_public_key: ${{ secrets.AWX_PUBLIC_KEY }}
         run: |
           packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" rocky-linux.pkr.hcl
 
