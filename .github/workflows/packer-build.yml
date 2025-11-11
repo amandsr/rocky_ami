@@ -47,10 +47,14 @@ jobs:
           echo "Generated AMI Name: $FULL_AMI_NAME"
 
       - name: Initialize Packer
-        run: packer init .
+        run: |
+          # MODIFIED: Target the specific file to avoid duplicate variable errors
+          packer init rocky-linux.pkr.hcl
 
       - name: Validate template
-        run: packer validate .
+        run: |
+          # MODIFIED: Target the specific file
+          packer validate rocky-linux.pkr.hcl
 
       - name: Build AMI
         id: packer_build
@@ -61,9 +65,8 @@ jobs:
           PKR_VAR_awx_host: ${{ vars.AWX_HOST }}
           PKR_VAR_awx_job_template_id: ${{ vars.AWX_JOB_TEMPLATE_ID }}
         run: |
-          # We pass the ami_name as a -var and the AWX vars via env
-          # Packer will run and create 'rocky-manifest.json' on success
-          packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" .
+          # MODIFIED: Target the specific file
+          packer build -var "ami_name=${{ steps.set_ami_name.outputs.ami_name_full }}" rocky-linux.pkr.hcl
 
       - name: Extract AMI ID from Manifest
         id: extract_ami_id
