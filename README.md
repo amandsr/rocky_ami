@@ -1,6 +1,5 @@
 # rocky_ami
 
-%% This is Mermaid code. Paste it in a GitHub README.md
 graph TD
     %% Define the swimlanes
     subgraph GitHub Actions (Orchestrator)
